@@ -1,0 +1,80 @@
+# vLLM 本地实验 Docker Compose
+# CPU-only 模式 — 适合无 GPU 环境学习 vLLM 核心概念
+#
+# 使用方法:
+#   docker compose up -d          # 启动所有服务
+#   docker compose up api-server  # 仅启动 API Server
+#   docker compose logs -f        # 查看日志
+#   docker compose down           # 停止
+#
+# 首次启动会自动下载模型 (~500MB)，请耐心等待
+
+services:
+  # ============================================================
+  # 实验 1: OpenAI 兼容 API Server
+  # 启动后访问 http://localhost:8000
+  # ============================================================
+  api-server:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-api-server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/model_cache:/root/.cache/huggingface
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+    environment:
+      - VLLM_LOGGING_LEVEL=INFO
+      - VLLM_LOG_STATS_INTERVAL=10
+      - HF_ENDPOINT=https://hf-mirror.com        # 国内镜像加速
+    command: >
+      serve facebook/opt-125m
+      --device cpu
+      --dtype float32
+      --max-model-len 512
+      --max-num-batched-tokens 512
+      --max-num-seqs 4
+      --host 0.0.0.0
+      --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================================
+  # 实验 2: 离线推理脚本运行器
+  # docker compose run offline-inference python /app/scripts/01_offline_inference.py
+  # ============================================================
+  offline-inference:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-offline
+    profiles: ["run"]
+    volumes:
+      - ./data/model_cache:/root/.cache/huggingface
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+      - ./data/outputs:/app/outputs
+    environment:
+      - VLLM_LOGGING_LEVEL=INFO
+      - HF_ENDPOINT=https://hf-mirror.com
+    working_dir: /app
+    entrypoint: ["python"]
+
+  # ============================================================
+  # 实验 3: 调试/日志探索
+  # docker compose run debug-shell bash
+  # ============================================================
+  debug-shell:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-debug
+    profiles: ["debug"]
+    volumes:
+      - ./data/model_cache:/root/.cache/huggingface
+      - ./scripts:/app/scripts
+      - ./configs:/app/configs
+      - ./logs:/app/logs
+    environment:
+      - VLLM_LOGGING_LEVEL=DEBUG
+      - HF_ENDPOINT=https://hf-mirror.com
+    entrypoint: ["bash"]

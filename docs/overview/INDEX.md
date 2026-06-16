@@ -15,6 +15,10 @@
 5. [NVIDIA GPU / 昇腾 910B 排错](./03d_hardware_troubleshooting.md) — 硬件部署通用问题、显存管理、通信调试、性能优化
 6. [日志系统详解](./04_logging_system.md) — 日志格式、自定义输出目录、KV Cache 用量监控、Prometheus/OpenTelemetry 指标
 
+## 本地实验环境
+
+- [lab/](../../lab/) — Docker + CPU 模式本地实验环境（离线推理 / API Server / 参数对比 / 日志探索 / curl 测试）
+
 ## 待梳理模块
 
 1. [V1 引擎核心](./01_engine_core.md) — `vllm/v1/engine/`

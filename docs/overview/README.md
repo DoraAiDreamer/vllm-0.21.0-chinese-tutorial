@@ -365,22 +365,6 @@ csrc/
 
 ## 七、模块梳理导航
 
-以下目录将按模块逐步深入梳理：
+> 根目录也有一份同步的 [README.md](../../README.md) 和 [INDEX.md](../../INDEX.md)。
 
-| 序号 | 模块 | 路径 | 状态 |
-|------|------|------|------|
-| 1 | V1 引擎核心 | `vllm/v1/engine/` | 待梳理 |
-| 2 | 调度与 KV Cache | `vllm/v1/core/` | 待梳理 |
-| 3 | 注意力后端 | `vllm/v1/attention/` | 待梳理 |
-| 4 | Worker 与模型运行器 | `vllm/v1/worker/` | 待梳理 |
-| 5 | 模型执行与层 | `vllm/model_executor/` | 待梳理 |
-| 6 | 模型实现 | `vllm/model_executor/models/` | 待梳理 |
-| 7 | 编译管线 | `vllm/compilation/` | 待梳理 |
-| 8 | 分布式推理 | `vllm/distributed/` | 待梳理 |
-| 9 | LoRA 支持 | `vllm/lora/` | 待梳理 |
-| 10 | 多模态 | `vllm/multimodal/` | 待梳理 |
-| 11 | 量化 | `vllm/model_executor/layers/quantization/` | 待梳理 |
-| 12 | 入口 API | `vllm/entrypoints/` | 待梳理 |
-| 13 | 配置系统 | `vllm/config/` | 待梳理 |
-| 14 | 原生算子 | `csrc/` | 待梳理 |
-| 15 | 分词器与解析器 | `vllm/tokenizers/`、`vllm/tool_parsers/` | 待梳理 |
+详见 [源码解读索引](./INDEX.md)。

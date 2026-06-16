@@ -1,0 +1,38 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "detailed": {
+            "()": "vllm.logging_utils.NewLineFormatter",
+            "format": "%(levelname)s %(asctime)s [%(fileinfo)s:%(lineno)d] %(message)s",
+            "datefmt": "%m-%d %H:%M:%S"
+        },
+        "colored": {
+            "()": "vllm.logging_utils.ColoredFormatter",
+            "format": "%(levelname)s %(asctime)s [%(fileinfo)s:%(lineno)d] %(message)s",
+            "datefmt": "%m-%d %H:%M:%S"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "colored",
+            "level": "INFO",
+            "stream": "ext://sys.stdout"
+        },
+        "file": {
+            "class": "logging.FileHandler",
+            "formatter": "detailed",
+            "level": "DEBUG",
+            "filename": "/app/logs/vllm.log",
+            "encoding": "utf-8"
+        }
+    },
+    "loggers": {
+        "vllm": {
+            "handlers": ["console", "file"],
+            "level": "DEBUG",
+            "propagate": false
+        }
+    }
+}
