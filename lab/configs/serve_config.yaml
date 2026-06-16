@@ -1,0 +1,11 @@
+# vLLM Serve YAML 配置示例
+# 用法: vllm serve --config /app/configs/serve_config.yaml
+
+model: facebook/opt-125m
+host: "0.0.0.0"
+port: 8000
+device: cpu
+dtype: float32
+max-model-len: 512
+max-num-batched-tokens: 512
+max-num-seqs: 4
