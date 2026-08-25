@@ -685,6 +685,16 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration, IsHybrid)
     def get_mamba_state_shape_from_config(
         cls, vllm_config: "VllmConfig"
     ) -> tuple[tuple[int, int], tuple[int, int]]:
+        # 返回 Qwen3.5 中 GatedDeltaNet(GDN)线性注意力层的两类循环状态形状
+        # (conv_state, temporal_state),供 vLLM 分配 mamba cache 使用。
+        #
+        # 关键:这里把 tensor_parallel_size 传入,下游
+        # MambaStateShapeCalculator.gated_delta_net_state_shape 用 divide() 做
+        # 带整除校验的切分,返回的是 **单卡(per-TP)** 形状。在 Ascend 插件中,
+        # patch_mamba_config.verify_and_update_config 会据此计算
+        # ssm_block_page_size(temporal_state 的字节数),并把 attention block
+        # 对齐到该大小,从而推导出最终 block_size(如 Qwen3.5-4B 为 1024)。
+        # 因此 linear_* 头数/维度配置与 TP 的相对关系会直接影响 block_size。
         parallel_config = vllm_config.parallel_config
         hf_config = vllm_config.model_config.hf_text_config
         tp_size = parallel_config.tensor_parallel_size

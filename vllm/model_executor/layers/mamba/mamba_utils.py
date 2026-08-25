@@ -220,12 +220,31 @@ class MambaStateShapeCalculator:
         conv_kernel_size: int,
         num_spec: int = 0,
     ):
+        # 计算 GatedDeltaNet(GDN)两类循环状态的 per-TP 形状。
+        # conv_state:短卷积状态,temporal_state(SSM state):固定大小的循环状态。
+        # 两者都会被 patch_mamba_config.py 用来计算 mamba page 大小,并与
+        # attention KV block 做内存对齐(Ascend 要求所有 cache tensor 连续)。
+        #
+        # conv_dim 是卷积状态的特征维:K 部分有 num_k_heads 个头、每头 head_k_dim,
+        # 因门控有 2 倍展开(系数 2);再加上 V 部分 head_v_dim*num_v_heads。
         conv_dim = head_k_dim * num_k_heads * 2 + head_v_dim * num_v_heads
+        # divide() 来自 vllm.distributed.utils,先校验能否被 TP 整除再做整除。
+        # 即 conv_dim / num_v_heads 这些切分维度必须能被 tp_world_size 整除,
+        # 否则在配置阶段直接报错(fail-fast),而不是产生带余数的 shape。
+        # 注意:这里切分的是状态 shape 的维度,不是 page 字节数本身。
         conv_state_shape = cls._orient_conv_shape(
             divide(conv_dim, tp_world_size),
             conv_kernel_size - 1 + num_spec,
         )
 
+        # temporal_state(SSM state)形状 = (每卡 V 头数, head_v_dim, head_k_dim)。
+        # 对 Qwen3.5-4B(TP=1)真实配置:linear_num_value_heads=32、
+        # linear_value_head_dim=128、linear_key_head_dim=128,形状为 (32,128,128);
+        # 该 state 通常用 float32(mamba_ssm_dtype),故
+        # ssm_block_page_size = 32*128*128*4 = 2 MiB。attention 单 token K 约
+        # 2 KiB(head_dim=256, num_kv_heads=4, bf16),因此 patch 中需要 1024 个
+        # token 的 attention block 才能与之对齐,最终 block_size 被推导为 1024。
+        # 注意这里用的是 GDN 的 linear_* 头维度,不是 attention 的头维度。
         temporal_state_shape = (
             divide(num_v_heads, tp_world_size),
             head_v_dim,
