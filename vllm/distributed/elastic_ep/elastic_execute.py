@@ -130,6 +130,8 @@ def broadcast_expert_mapping(
     return physical_to_logical, num_local_physical_experts, num_logical_experts
 
 
+# [作用] 弹性专家并行(Elastic EP)扩缩容执行器：包装 Worker，在运行时重路由 collective 调用、
+#        重建通信组以支持 EP rank 的动态加入/移除。
 class ElasticEPScalingExecutor:
     def __init__(self, worker):
         self.worker_ref = weakref.ref(worker)

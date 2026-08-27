@@ -63,6 +63,12 @@ def with_cancellation(handler_func):
     to wait for an http disconnect message, and the other to do the work that we
     want done. When the first task finishes, the other is cancelled.
 
+    Starlette 自带的 `request.is_disconnected()` 有缺陷。
+    当请求经过中间件处理过后，它就收不到客户端断开事件，因此 vLLM 放弃了这个高层封装 API，改用底层原生方式监听断开。
+    取而代之，本方案参考了 Starlette 中 `StreamingResponse` 的实现范式：
+    并发等待两个任务，一个任务专门监听 HTTP 断开消息，另一个任务执行业务工作；
+    只要其中任意一个任务先执行完毕，就立刻取消另外一个任务。
+
     A core assumption of this method is that the body of the request has already
     been read. This is a safe assumption to make for fastapi handlers that have
     already parsed the body of the request into a pydantic model for us.
@@ -73,6 +79,11 @@ def with_cancellation(handler_func):
     In the case where a `StreamingResponse` is returned by the handler, this
     wrapper will stop listening for disconnects and instead the response object
     will start listening for disconnects.
+
+    背景痛点：客户端断开连接 (浏览器关掉、curl Ctrl‑C、客户端超时断开)，
+    但是后端 vLLM 推理任务还在后台默默跑，占用 GPU 显存、算力，造成显存泄漏、GPU 资源浪费。
+
+    监控客户端 TCP 断开事件；一旦客户端提前断开 HTTP 连接，立刻主动 cancel 掉后端大模型推理协程任务，释放 GPU 资源。
     """
 
     # Functools.wraps is required for this wrapper to appear to fastapi as a
@@ -103,6 +114,19 @@ def decrement_server_load(request: Request):
 
 
 def load_aware_call(func):
+    """
+    统计当前服务器正在处理中的活跃请求并发数（server_load_metrics），实现负载感知；
+    请求结束后自动扣减计数。专门配合负载均衡、调度、自适应限流使用。
+    Args:
+        func: 被装饰的FastAPI异步路由处理函数
+
+    Raises:
+        ValueError: 未传入raw_request参数时抛出异常
+
+    Returns:
+        wrapper: 经过负载计数逻辑包装后的异步函数
+    """
+
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         raw_request = kwargs.get("raw_request", args[1] if len(args) > 1 else None)
@@ -126,12 +150,20 @@ def load_aware_call(func):
             raw_request.app.state.server_load_metrics -= 1
             raise
 
+        """
+        1. BackgroundTask 里面**不要执行超长、高可靠要求的业务**。如果进程中途崩溃，后台任务会被杀死，不会重试。
+        2. SSE 客户端断开（Ctrl‑C）：Starlette 依然会执行完 BackgroundTask。vLLM 负载计数器可以正常‑1，不会产生计数泄漏。
+        3. BackgroundTask 代码**不会阻塞 HTTP 响应返回给客户端**，做到响应快速返回，善后工作后台慢慢执行。
+        """
         if isinstance(response, (JSONResponse, StreamingResponse)):
             if response.background is None:
+                # 没有任何后台任务 → 创建单个后台任务，挂上计数器扣减函数
                 response.background = BackgroundTask(decrement_server_load, raw_request)
             elif isinstance(response.background, BackgroundTasks):
+                # 已经是多任务容器 → 追加一条扣减任务
                 response.background.add_task(decrement_server_load, raw_request)
             elif isinstance(response.background, BackgroundTask):
+                # 已有单个任务 → 升级为BackgroundTasks容器，新旧两个任务一起跑
                 # Convert the single BackgroundTask to BackgroundTasks
                 # and chain the decrement_server_load task to it
                 tasks = BackgroundTasks()

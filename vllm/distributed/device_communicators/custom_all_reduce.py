@@ -47,6 +47,8 @@ def is_weak_contiguous(inp: torch.Tensor):
     )
 
 
+# [作用] 自定义 P2P 环形 all-reduce：同机 NVLink 小消息(默认 ≤8MiB)下比 NCCL 更低延迟，
+#        通过 CUDA IPC 交换各 rank 指针并在自定义 kernel 里流水归约；大消息自动回退 NCCL。
 class CustomAllreduce:
     _SUPPORTED_WORLD_SIZES = [2, 4, 6, 8]
 

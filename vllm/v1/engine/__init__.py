@@ -32,6 +32,8 @@ FINISH_REASON_STRINGS = ("stop", "length", "abort", "error", "repetition")
 EEP_NOTIFICATION_CALL_ID = -1
 
 
+# [作用] 弹性引擎并行(Elastic Engine Parallel, EEP)事件通知类型：用于新引擎初始化
+#        就绪、权重加载就绪、重配置完成、关闭完成等生命周期事件的跨进程通知。
 class EEPNotificationType(enum.Enum):
     NEW_CORE_ENGINES_INIT_READY = "NEW_CORE_ENGINES_INIT_READY"
     NEW_CORE_ENGINES_WEIGHTS_INIT_READY = "NEW_CORE_ENGINES_WEIGHTS_INIT_READY"
@@ -39,11 +41,14 @@ class EEPNotificationType(enum.Enum):
     SHUTDOWN_COMPLETE = "SHUTDOWN_COMPLETE"
 
 
+# [作用] 请求结束原因枚举(用 int 紧凑序列化)：stop(命中停止串)/length(达到长度上限)/
+#        abort(客户端中止)/error(可重试内部错误，恒转 500)/repetition(检测到重复幻觉)。
 class FinishReason(enum.IntEnum):
     """
     Reason a request finished - stop, length, abort, error, or repetition.
 
     Int rather than Str for more compact serialization.
+    使用 int 而不是 Str 进行序列化，可以实现更紧凑的序列化。
 
     stop - a stop string was emitted
     length - max_tokens was consumed, or max_model_len was reached
@@ -64,6 +69,8 @@ class FinishReason(enum.IntEnum):
         return FINISH_REASON_STRINGS[self.value]
 
 
+# [作用] EngineCore 启动完成后发给各前端的就绪响应：携带可能因 KV cache 自动适配而
+#        变化的初始化后配置(max_model_len、GPU 块数、DP 统计地址)。
 @dataclass
 class EngineCoreReadyResponse:
     """Sent from EngineCore to each frontend at the end of engine startup.
@@ -77,6 +84,9 @@ class EngineCoreReadyResponse:
     dp_stats_address: str | None
 
 
+# [作用] 前端→EngineCore 的请求消息(msgspec 高效序列化)：携带 token/embedding、
+#        采样或池化参数、到达时间、LoRA、多模态特征、DP rank、client_index、
+#        优先级、可恢复标记等全部请求上下文。
 class EngineCoreRequest(
     msgspec.Struct,
     array_like=True,  # type: ignore[call-arg]
@@ -137,6 +147,8 @@ class EngineCoreRequest(
         return self.pooling_params
 
 
+# [作用] EngineCore 事件类型：QUEUED(入队)/SCHEDULED(被调度)/PREEMPTED(被抢占)，
+#        配合时间戳供前端计算排队/调度/抢占等区间延迟。
 class EngineCoreEventType(enum.IntEnum):
     """The type of engine core request event."""
 
@@ -145,6 +157,8 @@ class EngineCoreEventType(enum.IntEnum):
     PREEMPTED = 3
 
 
+# [作用] 与某个请求关联的带时间戳 EngineCore 事件：用单调时钟记录 QUEUED/SCHEDULED/
+#        PREEMPTED 发生时刻，随 EngineCoreOutput 回传前端用于时延统计(不跨进程比较)。
 class EngineCoreEvent(msgspec.Struct):
     """A timestamped engine core event associated with a request.
 
@@ -164,6 +178,9 @@ class EngineCoreEvent(msgspec.Struct):
         return cls(event_type, timestamp)
 
 
+# [作用] EngineCore→前端的单请求单步输出：本步新生成 token、logprobs、
+#        prompt logprobs、池化输出、结束/停止原因、事件、KV 传输参数、
+#        prefill 统计、路由专家、NaN 计数。
 class EngineCoreOutput(
     msgspec.Struct,
     array_like=True,  # type: ignore[call-arg]
@@ -197,6 +214,7 @@ class EngineCoreOutput(
         return self.finish_reason is not None
 
 
+# [作用] 工具(utility)调用的输出：按 call_id 关联调用，携带失败信息或结果。
 class UtilityOutput(
     msgspec.Struct,
     array_like=True,  # type: ignore[call-arg]
@@ -209,6 +227,9 @@ class UtilityOutput(
     result: UtilityResult | None = None
 
 
+# [作用] EngineCore 单步的全部输出批次：各请求的 EngineCoreOutput 列表、
+#        调度器统计、时间戳、工具调用结果、已完成请求集合，以及 DP 的
+#        wave_complete/start_wave 信号。
 class EngineCoreOutputs(
     msgspec.Struct,
     array_like=True,  # type: ignore[call-arg]
@@ -240,6 +261,8 @@ class EngineCoreOutputs(
             self.timestamp = time.monotonic()
 
 
+# [作用] 前端→EngineCore 的请求类型，用单字节 hex 表示以便在 socket 上直接
+#        发送(免额外编码)：ADD/ABORT/START_DP_WAVE/UTILITY/EXECUTOR_FAILED/WAKEUP。
 class EngineCoreRequestType(enum.Enum):
     """
     Request types defined as hex byte strings, so it can be sent over sockets
@@ -256,6 +279,8 @@ class EngineCoreRequestType(enum.Enum):
     WAKEUP = b"\x05"
 
 
+# [作用] 重配置分布式拓扑的请求：携带新的 DP 大小/rank、master ip/port、端口列表、
+#        coord store 端口等，用于弹性扩缩容时重建数据并行通信组。
 class ReconfigureDistributedRequest(msgspec.Struct):
     new_data_parallel_size: int
     new_data_parallel_rank: int
@@ -266,6 +291,8 @@ class ReconfigureDistributedRequest(msgspec.Struct):
     coord_store_port: int
 
 
+# [作用] 重配置时的 rank 处理类型哨兵：KEEP_CURRENT_RANK(保留当前 rank)、
+#        SHUTDOWN_CURRENT_RANK(关闭当前 rank)。
 class ReconfigureRankType(enum.IntEnum):
     """
     Rank type for reconfiguring distributed request.

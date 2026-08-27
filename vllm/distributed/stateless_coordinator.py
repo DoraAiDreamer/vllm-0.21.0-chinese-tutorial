@@ -58,6 +58,8 @@ def _fetch_group_ports(key: str, coord_store: Store) -> list[int]:
     return list(struct.unpack(_PORTS_FMT, coord_store.get(key)))
 
 
+# [作用] 无状态通信组：独立于 torch 全局 WORLD 组创建 CPU/device/TCPStore 通信组，
+#        可在不销毁已有组的情况下建立不同参与者集合的通信组，主要用于 Elastic EP。
 class StatelessGroupCoordinator(GroupCoordinator):
     """
     A stateless version of the GroupCoordinator class in parallel_state,

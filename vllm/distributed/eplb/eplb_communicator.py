@@ -41,6 +41,8 @@ def has_nixl() -> bool:
     return nixl_utils.NixlWrapper is not None
 
 
+# [作用] EPLB 专家权重传输通信器抽象：定义 add_send/add_recv/execute 接口，
+#        后端可基于 torch.distributed(NCCL/Gloo staged)、NiXL 或 PyNccl 实现重平衡时的专家权重搬运。
 class EplbCommunicator(ABC):
     """Abstract EPLB communicator for expert weight transfers."""
 

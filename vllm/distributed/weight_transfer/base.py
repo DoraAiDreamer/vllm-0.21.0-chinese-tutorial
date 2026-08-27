@@ -46,6 +46,8 @@ class WeightTransferUpdateRequest:
     update_info: dict[str, Any] = field(default_factory=dict)
 
 
+# [作用] 在线权重传输引擎抽象基类：建立训练端→推理 worker 的连接，分批接收权重并通过 load_weights 回调写入模型；
+#        NcclWeightTransferEngine(跨进程/节点) 与 IpcWeightTransferEngine(同机 CUDA IPC) 为其实现。
 class WeightTransferEngine(ABC, Generic[TInitInfo, TUpdateInfo]):
     """
     Base class for weight transfer engines that handle transport of model weights

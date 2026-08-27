@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
+# [作用] EC(Encoder Compute) Connector 角色枚举：SCHEDULER 运行在调度器进程，WORKER 运行在 worker 进程
 class ECConnectorRole(enum.Enum):
     # Connector running in the scheduler process
     SCHEDULER = 0
@@ -47,6 +48,7 @@ class ECConnectorRole(enum.Enum):
     WORKER = 1
 
 
+# [作用] 调度器 EC connector 与 worker EC connector 之间传递的元数据
 class ECConnectorMetadata(ABC):  # noqa: B024
     """
     Abstract Metadata used to communicate between the
@@ -56,6 +58,8 @@ class ECConnectorMetadata(ABC):  # noqa: B024
     pass
 
 
+# [作用] EC 传输连接器基类：用于多模态编码器输出的预填充/解码分离(Prefill/Decode disagg)，
+#        producer 侧 save_caches 发送编码器输出，consumer 侧 start_load_caches/get_finished 接收(按 mm_hash 标识)。
 class ECConnectorBase(ABC):
     def __init__(self, vllm_config: "VllmConfig", role: ECConnectorRole):
         self._connector_metadata: ECConnectorMetadata | None = None

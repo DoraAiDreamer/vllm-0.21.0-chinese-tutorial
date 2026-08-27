@@ -37,6 +37,7 @@ if has_flashinfer_nvlink_one_sided():
 logger = init_logger(__name__)
 
 
+# [作用] 无第三方依赖的 all-gather + reduce-scatter 组合实现 EP all-to-all（dispatch/combine），作为兜底后端
 class AgRsAll2AllManager(All2AllManagerBase):
     """
     An implementation of all2all communication based on
@@ -193,6 +194,7 @@ class DeepEPAll2AllManagerBase(All2AllManagerBase):
             self.handle_cache._cache.clear()
 
 
+# [作用] DeepEP 高吞吐(High Throughput) all-to-all 实现，适合 prefill 等大批量场景
 class DeepEPHTAll2AllManager(DeepEPAll2AllManagerBase):
     """
     All2All communication based on DeepEP High-Throughput kernels.
@@ -254,6 +256,7 @@ class DeepEPHTAll2AllManager(DeepEPAll2AllManagerBase):
         deep_ep.Buffer.set_num_sms(num_sms)
 
 
+# [作用] DeepEP 低延迟(Low Latency) all-to-all 实现，适合 decode 等小批量高灵敏度场景
 class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
     """
     All2All communication based on DeepEP Low-Latency kernels.
@@ -324,6 +327,7 @@ class DeepEPLLAll2AllManager(DeepEPAll2AllManagerBase):
         return 0
 
 
+# [作用] 基于 NVIDIA Xfer Library(NiXL) 的 EP all-to-all 实现，用于 PD 分离/高速跨节点专家路由
 class NixlEPAll2AllManager(All2AllManagerBase):
     """
     All2All communication based on NIXL EP kernels.
@@ -439,6 +443,7 @@ class NixlEPAll2AllManager(All2AllManagerBase):
         return 0
 
 
+# [作用] 基于 FlashInfer 的 NVLink 双边(two-sided) all-to-all 实现
 class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
     """
     All2All communication based on flashinfer all2allv/two-sided NVLink kernels.
@@ -546,6 +551,7 @@ class FlashInferNVLinkTwoSidedManager(All2AllManagerBase):
                 self.initialized = False
 
 
+# [作用] 基于 FlashInfer 的 NVLink 单边(one-sided, RDMA 式) all-to-all 实现
 class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
     """
     All2All communication based on FlashInfer's MoeAlltoAll/One-sided NVLink kernel.
@@ -668,6 +674,7 @@ class FlashInferNVLinkOneSidedManager(All2AllManagerBase):
                 self.initialized = False
 
 
+# [作用] 基于 Mori 的 EP all-to-all 实现
 class MoriAll2AllManager(All2AllManagerBase):
     def __init__(self, cpu_group):
         assert has_mori(), (

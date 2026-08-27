@@ -10,6 +10,7 @@ from torch.distributed import ProcessGroup
 from vllm.utils import is_moe_layer
 
 
+# [作用] 线程安全的弱引用缓存：按 kwargs 复用 all-to-all 通信句柄/资源，避免同配置重复创建
 class Cache:
     def __init__(self):
         self._cache: WeakValueDictionary = WeakValueDictionary()
@@ -27,6 +28,8 @@ class Cache:
             return instance
 
 
+# [作用] MoE 专家并行(E) all-to-all 通信基类：定义 dispatch(把 token 按目标专家发到对应 rank)、
+#        combine(收回各专家结果并加权)、dispatch_router_logits 等接口；由 DeepEP/NiXL/FlashInfer/AgRs 等后端实现。
 class All2AllManagerBase:
     rank: int
     world_size: int
@@ -115,6 +118,8 @@ class All2AllManagerBase:
         pass
 
 
+# [作用] 设备通信器基类：封装特定设备(CUDA/CPU/XPU)的 P2P 集合通信，供 GroupCoordinator 选择以替代
+#        默认的 torch.distributed；可基于 cpu_group 交换 unique-id 等握手信息、基于 device_group 做张量通信。
 class DeviceCommunicatorBase:
     """
     Base class for device-specific communicator.

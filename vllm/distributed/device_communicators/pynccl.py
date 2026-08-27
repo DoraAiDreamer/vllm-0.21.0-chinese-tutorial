@@ -55,6 +55,8 @@ def register_nccl_symmetric_ops(pynccl_comm):
     )
 
 
+# [作用] 通过 ctypes 直接调用 NCCL C 库的通信器(pynccl_wrapper)，绕过 torch.distributed 的 Python 开销，
+#        提供 all_reduce/all_gather/send/recv 及 CUDA Graph 兼容能力，被自定义 all-reduce/EPLB/权重传输复用。
 class PyNcclCommunicator:
     def __init__(
         self,

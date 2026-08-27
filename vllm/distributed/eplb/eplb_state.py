@@ -58,6 +58,7 @@ from .rebalance_execute import (
 logger = init_logger(__name__)
 
 
+# [作用] EPLB 重平衡算法使用的模型级统计量：专家负载滑动窗口、物理专家数、分组/节点/GPU 数
 @dataclass
 class EplbStats:
     """
@@ -87,6 +88,7 @@ class EplbStats:
     """
 
 
+# [作用] 单个 MoE 模型的 EPLB 状态：物理专家↔逻辑专家映射、负载统计、冗余专家放置等
 @dataclass
 class EplbModelState:
     """EPLB metrics."""
@@ -207,6 +209,8 @@ class EplbModelState:
     """
 
 
+# [作用] 专家并行负载均衡(EPLB)的全局状态(按模型 config hash 区分)：维护滑动窗口专家负载、
+#        周期性触发重平衡策略、在 EP rank 间拷贝专家权重并更新 expert_map；可异步后台执行。
 class EplbState:
     """
     EplbState of each expert parallel model. Key is the model config hash.
@@ -921,6 +925,7 @@ class EplbState:
         return eplb_state
 
 
+# [作用] 存储在单个 MoE 层内的运行时 EPLB 数据：专家负载视图、逻辑→物理专家映射、副本计数
 @dataclass
 class EplbLayerState:
     """Runtime EPLB data stored in the MoE layer."""

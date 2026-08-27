@@ -81,6 +81,8 @@ CopyBlocksOp = Callable[
 logger = init_logger(__name__)
 
 
+# [作用] 混合内存分配器(HMA)能力标记：支持的 connector 可在请求结束时异步接管 KV block 的释放，
+#        用于跨层统一/外部管理 KV cache 内存。
 class SupportsHMA(ABC):
     """
     The class that indicates the corresponding connector supports hybrid memory
@@ -120,6 +122,7 @@ def supports_hma(connector: Any) -> bool:
         return isinstance(connector, SupportsHMA)
 
 
+# [作用] KV Connector 角色枚举：SCHEDULER 运行在调度器进程，WORKER 运行在 GPU worker 进程
 class KVConnectorRole(enum.Enum):
     # Connector running in the scheduler process
     SCHEDULER = 0
@@ -128,6 +131,7 @@ class KVConnectorRole(enum.Enum):
     WORKER = 1
 
 
+# [作用] Prefill/Decode worker 间带外握手元数据(需可序列化)，如交换 NCCL unique-id/NiXL 地址
 class KVConnectorHandshakeMetadata(ABC):  # noqa: B024
     """
     Metadata used for out of band connector handshake between
@@ -137,6 +141,7 @@ class KVConnectorHandshakeMetadata(ABC):  # noqa: B024
     pass
 
 
+# [作用] 调度器→worker 的每步元数据：描述本步哪些 KV 块需要加载/保存及远端句柄等
 class KVConnectorMetadata(ABC):  # noqa: B024
     """
     Abstract Metadata used to communicate
@@ -146,6 +151,7 @@ class KVConnectorMetadata(ABC):  # noqa: B024
     pass
 
 
+# [作用] worker→调度器的回报元数据：各 worker 产出后用 aggregate 合并，再交回调度器 connector
 class KVConnectorWorkerMetadata(ABC):
     """
     Abstract Metadata used to communicate back
@@ -167,6 +173,10 @@ class KVConnectorWorkerMetadata(ABC):
         pass
 
 
+# [作用] KV Connector V1 核心抽象：实现 PD 分离(prefill 端 save、decode 端 load)与 KV cache offload。
+#        调度器侧查前缀命中(get_num_new_matched_tokens)、构造元数据(build_connector_meta)；
+#        worker 侧绑定 KV cache 后逐层异步加载(start_load_kv/wait_for_layer_load)与保存(save_kv_layer/wait_for_save)，
+#        与 v1 分层前向重叠。NiXL/Mooncake/LMCache/offloading 等均为其子类。
 class KVConnectorBase_V1(ABC):
     """
     Base class for KV connectors.

@@ -88,6 +88,10 @@ HANDSHAKE_TIMEOUT_MINS = 5
 _R = TypeVar("_R")  # Return type for collective_rpc
 
 
+# [作用] vLLM 引擎核心(同步实现)：持有 ModelExecutor、Scheduler、KV cache
+#        配置与结构化输出管理器，负责初始化 KV cache、接收/中止请求、单步
+#        调度+执行(step)、睡眠/唤醒、LoRA/Prefix cache 管理等；是整个推理
+#        引擎的主循环，EngineCoreProc/DPEngineCoreProc 等后台进程版本均继承它。
 class EngineCore:
     """Inner loop of vLLM's Engine."""
 
@@ -801,12 +805,17 @@ class EngineCore:
         raise NotImplementedError
 
 
+# [作用] EngineCore 关闭状态机：RUNNING(正常运行)/REQUESTED(已请求关闭)/
+#        SHUTTING_DOWN(正在排空并关闭)，用于协调引擎优雅退出。
 class EngineShutdownState(IntEnum):
     RUNNING = 0
     REQUESTED = 1
     SHUTTING_DOWN = 2
 
 
+# [作用] EngineCore 的后台进程版本：用 ZMQ 套接字与前端/客户端收发 EngineCoreRequest/
+#        EngineCoreOutputs，在独立进程中跑忙等循环(run_busy_loop)，处理输入输出套接字、
+#        握手(startup_handshake)与关闭流程；单卡/非 DP 的默认引擎进程。
 class EngineCoreProc(EngineCore):
     """ZMQ-wrapper for running EngineCore in background process."""
 
@@ -1623,6 +1632,9 @@ class EngineCoreProc(EngineCore):
                 self._send_abort_outputs_to_client(list(req_ids), client_index)
 
 
+# [作用] 数据并行(DP)场景的 EngineCoreProc：协调多个 DP rank 的请求波次(wave)、
+#        barrier 同步、全局未完成请求判断，以及弹性扩缩容时的分布式重配置；
+#        仅用于 MoE 模型的多引擎数据并行。
 class DPEngineCoreProc(EngineCoreProc):
     """ZMQ-wrapper for running EngineCore in background process
     in a data parallel context."""
@@ -1982,6 +1994,9 @@ class DPEngineCoreProc(EngineCoreProc):
         self.process_input_queue_block = False
 
 
+# [作用] Ray Actor 混入：让 EngineCore 作为 Ray actor 运行，尽早设置可见设备、
+#        初始化分布式追踪、执行 ZMQ 握手、提供 wait_for_init/run 等生命周期方法；
+#        与 EngineCoreProc 或 DPEngineCoreProc 组合成具体 actor。
 class EngineCoreActorMixin:
     """
     Ray actor for running EngineCore in a data parallel context
@@ -2095,6 +2110,8 @@ class EngineCoreActorMixin:
             self.shutdown()  # type: ignore[attr-defined]
 
 
+# [作用] MoE 模型数据并行的 Ray actor：组合 EngineCoreActorMixin 与
+#        DPEngineCoreProc，在 Ray 上运行带 DP 波次协调的 MoE 引擎核心。
 class DPMoEEngineCoreActor(EngineCoreActorMixin, DPEngineCoreProc):
     """Used for MoE model data parallel cases."""
 
@@ -2118,6 +2135,8 @@ class DPMoEEngineCoreActor(EngineCoreActorMixin, DPEngineCoreProc):
         )
 
 
+# [作用] 非 MoE 和/或非 DP 场景的 Ray actor：组合 EngineCoreActorMixin
+#        与 EngineCoreProc，在 Ray 上运行普通单引擎核心。
 class EngineCoreActor(EngineCoreActorMixin, EngineCoreProc):
     """Used for non-MoE and/or non-DP cases."""
 

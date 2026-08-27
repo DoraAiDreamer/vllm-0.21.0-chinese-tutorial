@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from vllm.distributed.stateless_coordinator import StatelessGroupCoordinator
 
 
+# [作用] CUDA Graph 捕获上下文：记录捕获期间所用的 CUDA 流，供 GroupCoordinator 在图捕获时切换 P2P 通信缓冲
 @dataclass
 class GraphCaptureContext:
     stream: torch.cuda.Stream
@@ -287,6 +288,9 @@ direct_register_custom_op(
 )
 
 
+# [作用] 一个进程组的统一通信封装：管理 TP/PP/DP/EP/CP 等组内的集合通信(all-reduce/gather/scatter)、
+#        P2P 张量字典收发、CPU(device_group=gloo)与 GPU(device_group=nccl)双通路，以及 CUDA Graph 捕获兼容；
+#        通过 get_tp_group()/get_pp_group() 等获取对应实例，是 vLLM 分布式通信的中枢。
 class GroupCoordinator:
     """
     PyTorch ProcessGroup wrapper for a group of processes.

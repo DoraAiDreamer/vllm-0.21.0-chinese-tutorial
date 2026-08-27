@@ -79,6 +79,7 @@ class _BarrierTimeoutError(RuntimeError):
     """
 
 
+# [作用] 弹性 EP 扩缩容的状态机与编排：协调新/旧 worker、重建并行配置、管理 scale-up/down 各阶段
 class ElasticEPScalingState:
     def __init__(
         self,
