@@ -1,0 +1,9 @@
+# understand-anything 工具产物（tmp + intermediate 等）
+.understand-anything/
+
+# Claude Code 本地配置
+.claude/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
