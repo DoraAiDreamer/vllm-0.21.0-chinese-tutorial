@@ -81,6 +81,11 @@ async def build_async_engine_client(
     usage_context: UsageContext = UsageContext.OPENAI_API_SERVER,
     client_config: dict[str, Any] | None = None,
 ) -> AsyncIterator[EngineClient]:
+    """异步上下文管理器：按 args 构建并产出 EngineClient（AsyncLLM 或远程客户端）。
+
+    处理 forkserver 预加载等启动细节，退出时负责关闭引擎。是 run_server
+    获取引擎客户端的入口（根据是否连接远程 engine 决定本地起 EngineCore 还是直连）。
+    """
     if os.getenv("VLLM_WORKER_MULTIPROC_METHOD") == "forkserver":
         # The executor is expected to be mp.
         # Pre-import heavy modules in the forkserver process
@@ -118,6 +123,10 @@ async def build_async_engine_client_from_engine_args(
         - multiprocess using AsyncLLMEngine RPC
 
     Returns the Client or None if the creation failed.
+
+    根据 AsyncEngineArgs 创建 V1 的 AsyncLLM（引擎客户端）：先由 engine_args
+    生成 VllmConfig，再 `AsyncLLM.from_vllm_config` 建立（内部经 ZMQ 拉起
+    EngineCore 子进程）；yield 出客户端，结束时调用 shutdown 清理。
     """
 
     # Create the EngineConfig (determines if we can use V1).
@@ -159,6 +168,12 @@ def build_app(
     supported_tasks: tuple["SupportedTask", ...] | None = None,
     model_config: ModelConfig | None = None,
 ) -> FastAPI:
+    """构建 FastAPI 应用：按 supported_tasks 挂载全部路由、注册中间件与异常处理器。
+
+    路由包括模型/管理(serve)、OpenAI chat/completions/responses、池化、实时语音、
+    PD 分离、RLHF、弹性 EP 等；中间件包括 CORS、鉴权、请求 ID、扩缩容检查及用户自定义。
+    返回尚未绑定引擎状态的 app（状态在 init_app_state / lifespan 阶段填充）。
+    """
     if supported_tasks is None:
         warnings.warn(
             "The 'supported_tasks' parameter was not provided to "
@@ -320,6 +335,12 @@ async def init_app_state(
     args: Namespace,
     supported_tasks: tuple["SupportedTask", ...] | None = None,
 ) -> None:
+    """应用启动时(lifespan)初始化各 serving 服务并挂到 app.state。
+
+    创建 OpenAIServingModels/Render/Tokenization，并按 supported_tasks
+    初始化 generate、pooling、realtime、transcription 等服务；加载静态 LoRA、
+    chat template，传播结构化输出/推理相关配置。路由通过 request.app.state 取用。
+    """
     vllm_config = engine_client.vllm_config
 
     # Propagate enable_in_reasoning to the API-server process. The engine core
@@ -508,6 +529,8 @@ async def init_render_app_state(
     state.server_load_metrics = 0
 
 
+# [作用] 预建并绑定 TCP 监听 socket（自动识别 IPv4/IPv6，开启地址/端口复用），
+#        便于多 API server 进程共享同一监听地址。
 def create_server_socket(addr: tuple[str, int]) -> socket.socket:
     family = socket.AF_INET
     if is_valid_ipv6_address(addr[0]):
@@ -521,12 +544,15 @@ def create_server_socket(addr: tuple[str, int]) -> socket.socket:
     return sock
 
 
+# [作用] 创建并绑定 Unix domain socket（同机反代场景，比 TCP 开销小）。
 def create_server_unix_socket(path: str) -> socket.socket:
     sock = socket.socket(family=socket.AF_UNIX, type=socket.SOCK_STREAM)
     sock.bind(path)
     return sock
 
 
+# [作用] 启动前校验：确保 --tool-call-parser 与 reasoning parser 均为已注册的合法值，
+#        否则抛出 KeyError 报错。
 def validate_api_server_args(args):
     valid_tool_parses = ToolParserManager.list_registered()
     if args.enable_auto_tool_choice and args.tool_call_parser not in valid_tool_parses:
@@ -548,7 +574,12 @@ def validate_api_server_args(args):
 @instrument(span_name="API server setup")
 def setup_server(args):
     """Validate API server args, set up signal handler, create socket
-    ready to serve."""
+    ready to serve.
+
+    服务器启动准备：记录版本/模型与非默认参数、导入 tool/reasoning parser 插件、
+    校验参数，并提前绑定监听 socket（TCP/UDS，在引擎就绪前占住端口避免与 Ray 竞争）。
+    返回监听地址字符串与 socket。
+    """
 
     log_version_and_model(logger, VLLM_VERSION, args.model)
     log_non_default_args(args)
@@ -600,6 +631,10 @@ async def build_and_serve(
     """Build FastAPI app, initialize state, and start serving.
 
     Returns the shutdown task for the caller to await.
+
+    组装并启动主推理服务器：取支持的任务集合，build_app 建路由、
+    init_app_state 挂 serving 服务，最后用 serve_http 启动 Uvicorn。
+    返回关闭任务供调用方等待。
     """
 
     # Get uvicorn log config (from file or with endpoint filter)
@@ -649,6 +684,9 @@ async def build_and_serve_renderer(
     start serving.
 
     Returns the shutdown task for the caller to await.
+
+    组装并启动"仅渲染(无 GPU 推理)"服务器：只提供 chat template 渲染/token 计数等
+    预处理能力，用 init_render_app_state 初始化状态，再启动 Uvicorn。
     """
 
     # Get uvicorn log config (from file or with endpoint filter)
@@ -684,7 +722,11 @@ async def build_and_serve_renderer(
 
 
 async def run_server(args, **uvicorn_kwargs) -> None:
-    """Run a single-worker API server."""
+    """Run a single-worker API server.
+
+    单实例 API Server 总入口（`vllm serve` 默认路径）：做日志前缀装饰，
+    setup_server 建监听 socket，再交给 run_server_worker 启动。
+    """
 
     # Add process-specific prefix to stdout and stderr.
     decorate_logs("APIServer")
@@ -696,7 +738,12 @@ async def run_server(args, **uvicorn_kwargs) -> None:
 async def run_server_worker(
     listen_address, sock, args, client_config=None, **uvicorn_kwargs
 ) -> None:
-    """Run a single API server worker."""
+    """Run a single API server worker.
+
+    单个 API server 工作进程：导入 parser 插件，进入 build_async_engine_client
+    上下文（建引擎），build_and_serve 启动 Uvicorn；退出时等待关闭并释放 socket。
+    多 API server（--api-server-count）时每个进程复用此函数。
+    """
 
     if args.tool_parser_plugin and len(args.tool_parser_plugin) > 3:
         ToolParserManager.import_tool_parser(args.tool_parser_plugin)

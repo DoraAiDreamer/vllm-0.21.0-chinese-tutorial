@@ -35,12 +35,23 @@ Search by using: `--help=<ConfigGroup>` to explore options by section (e.g.,
 
 
 class ServeSubcommand(CLISubcommand):
-    """The `serve` subcommand for the vLLM CLI."""
+    """The `serve` subcommand for the vLLM CLI.
+
+    `vllm serve` 子命令：启动 OpenAI 兼容 API 服务器（含 headless、
+    单/多 API server、gRPC 等模式），是推理服务的主入口。
+    """
 
     name = "serve"
 
     @staticmethod
     def cmd(args: argparse.Namespace) -> None:
+        """子命令执行入口：解析部署模式并分发到对应启动路径。
+
+        顺序：处理位置参数 model → gRPC 模式 → headless 模式 →
+        根据数据并行负载均衡模式确定 api_server_count →
+        分发到 run_headless(0 个) / run_multi_api_server(>1 个) /
+        run_server(单个，uvloop 内联运行)。
+        """
         # If model is specified in CLI (as positional arg), it takes precedence
         if hasattr(args, "model_tag") and args.model_tag is not None:
             args.model = args.model_tag
@@ -122,11 +133,13 @@ class ServeSubcommand(CLISubcommand):
             uvloop.run(run_server(args))
 
     def validate(self, args: argparse.Namespace) -> None:
+        """参数校验钩子：交由 cli_args.validate_parsed_serve_args 做合法性检查。"""
         validate_parsed_serve_args(args)
 
     def subparser_init(
         self, subparsers: argparse._SubParsersAction
     ) -> FlexibleArgumentParser:
+        """注册 `serve` 子命令的参数解析器，挂上全部 serve/引擎相关参数。"""
         serve_parser = subparsers.add_parser(
             self.name,
             help="Launch a local OpenAI-compatible API server to serve LLM "
@@ -141,10 +154,17 @@ class ServeSubcommand(CLISubcommand):
 
 
 def cmd_init() -> list[CLISubcommand]:
+    """返回本模块注册的 CLI 子命令列表（供 cli/main.py 收集）。"""
     return [ServeSubcommand()]
 
 
 def run_headless(args: argparse.Namespace):
+    """以 headless 模式运行：只启动 EngineCore/Worker，不启动任何 API server。
+
+    用于纯计算节点（多节点 PP/TP 的非首节点）或外部负载均衡场景；
+    本节点作为 worker 加入分布式组，或拉起本地多个数据并行引擎并监控存活。
+    捕获 SIGTERM/SIGINT 做优雅退出。
+    """
     if args.api_server_count > 1:
         raise ValueError("api_server_count can't be set in headless mode")
 
@@ -229,6 +249,12 @@ def run_headless(args: argparse.Namespace):
 
 
 def run_multi_api_server(args: argparse.Namespace):
+    """启动多个 API server 进程（--api-server-count > 1），共享监听 socket。
+
+    先 launch_core_engines 拉起数据并行引擎（含 coordinator），再用
+    APIServerProcessManager fork 出多个共享同一监听端口的 API server 进程
+    各自连接对应引擎；最后等待全部完成或失败，收到信号时优雅关闭。
+    """
     assert not args.headless
     num_api_servers: int = args.api_server_count
     assert num_api_servers > 0

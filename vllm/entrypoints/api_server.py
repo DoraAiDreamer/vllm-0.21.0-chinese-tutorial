@@ -37,12 +37,14 @@ app = FastAPI()
 engine = None
 
 
+# [作用] 极简健康检查端点，返回 200 表示引擎存活。
 @app.get("/health")
 async def health() -> Response:
     """Health check."""
     return Response(status_code=200)
 
 
+# [作用] 极简补全端点：接收 {prompt, stream, ...采样参数}，返回 {text: [...]}。
 @app.post("/generate")
 async def generate(request: Request) -> Response:
     """Generate completion for the request.
@@ -56,6 +58,8 @@ async def generate(request: Request) -> Response:
     return await _generate(request_dict, raw_request=request)
 
 
+# [作用] 生成逻辑主体：用老版 AsyncLLMEngine(V0) 跑生成；流式走 SSE，
+#        非流式收集最终结果；@with_cancellation 在客户端断开时取消引擎任务。
 @with_cancellation
 async def _generate(request_dict: dict, raw_request: Request) -> Response:
     prompt = request_dict.pop("prompt")
@@ -95,6 +99,7 @@ async def _generate(request_dict: dict, raw_request: Request) -> Response:
     return JSONResponse(ret)
 
 
+# [作用] 配置并返回 FastAPI 应用（此处仅设置反代根路径 root_path）。
 def build_app(args: Namespace) -> FastAPI:
     global app
 
@@ -102,6 +107,7 @@ def build_app(args: Namespace) -> FastAPI:
     return app
 
 
+# [作用] 初始化应用：创建全局老版 AsyncLLMEngine(V0)，并把引擎与参数挂到 app.state。
 async def init_app(
     args: Namespace,
     llm_engine: AsyncLLMEngine | None = None,
@@ -123,6 +129,7 @@ async def init_app(
     return app
 
 
+# [作用] 启动这个示例服务器：init_app 建引擎后，用 launcher.serve_http 拉起 Uvicorn。
 async def run_server(
     args: Namespace, llm_engine: AsyncLLMEngine | None = None, **uvicorn_kwargs: Any
 ) -> None:
