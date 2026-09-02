@@ -367,6 +367,6 @@ csrc/
 
 | 文档 | 说明 |
 |------|------|
-| [源码解读索引](./INDEX.md) | 按模块逐步深入的梳理计划与进度 |
+| [源码解读索引](./docs/overview/INDEX.md) | 按模块逐步深入的梳理计划与进度 |
 | [使用示例](./examples/README.md) | vLLM 各功能的使用示例（含中文说明） |
 | [官方 README](./README_vllm_official.md) | vLLM 官方原始 README |

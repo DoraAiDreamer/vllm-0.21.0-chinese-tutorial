@@ -365,6 +365,6 @@ csrc/
 
 ## 七、模块梳理导航
 
-> 根目录也有一份同步的 [README.md](../../README.md) 和 [INDEX.md](../../INDEX.md)。
+> 根目录 [README.md](../../README.md) 是项目入口；根目录 [INDEX.md](../../INDEX.md) 为跳转页，指向本索引。
 
 详见 [源码解读索引](./INDEX.md)。
